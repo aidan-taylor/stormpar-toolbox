@@ -35,7 +35,7 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 	
 	% Loop through data and save to disk
 	while hasdata(ds)
-		% Get data
+		% Get data (indexes sequentially through datastore)
 		[imgData, metadata] = read(ds);
 		
 		% Extract folder path
@@ -48,15 +48,15 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 		% Get the dataset name the data would go into
 		% datasetName = fullfile(timeData.Year, timeData.Month, timeData.Day, radarID, fileName);
 		
-		% Write image to disk
+		% Write image to disk (doesn't overwrite existing file)
 		RGBim = imgData{1};
 		filePath = fullfile(sourcePath, [fileName, '.png']);
-		imwrite(RGBim, filePath);
+		if ~isfile(filePath), imwrite(RGBim, filePath); end
 		
-		% Write label to disk
+		% Write label to disk (doesn't overwrite existing file)
 		% label = imgData{2};
 		% filePath = fullfile(sourcePath, [fileName, '.txt']);
-		% writelines(string(label), filePath);
+		% if ~isfile(filePath), writelines(string(label), filePath); end
 	end
 	
 	% Close HDF5 file
