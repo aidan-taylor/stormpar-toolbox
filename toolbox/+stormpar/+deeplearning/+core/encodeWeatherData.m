@@ -54,9 +54,9 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 		imwrite(RGBim, filePath);
 		
 		% Write label to disk
-		label = imgData{2};
-		filePath = fullfile(sourcePath, [fileName, '.txt']);
-		writelines(string(label), filePath);
+		% label = imgData{2};
+		% filePath = fullfile(sourcePath, [fileName, '.txt']);
+		% writelines(string(label), filePath);
 	end
 	
 	% Close HDF5 file
