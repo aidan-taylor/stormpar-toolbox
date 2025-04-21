@@ -13,7 +13,7 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 	
 	arguments
 		nameValueArgs.amountOfJitter (1,1) double = 0.01;
-		nameValueArgs.imageSize (1,2) double = [250, 250];
+		nameValueArgs.imageSize (1,2) double = [240, 240];
 	end
 	
 	% Load the specified data
@@ -33,30 +33,43 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 	% H5fileID = H5F.open(H5Filename, "H5F_ACC_RDWR", "H5P_DEFAULT");
 	% end
 	
+	nFiles = length(ds.UnderlyingDatastores{1}.Files);
+	
 	% Loop through data and save to disk
-	while hasdata(ds)
+	for iFiles = 1:nFiles
+		
+		% Check if data can actually be read (safety if loop goes too many times)
+		if ~hasdata(ds)
+			warning('STORMPAR:CORE:InvalidID', ...
+				'Index %i exceeds the number of readable files in the datastore', iFiles); 
+			break
+		end 
+		
+		% Form path to possible png file
+		[location, name] = fileparts(ds.UnderlyingDatastores{1}.Files{iFiles});
+		pngPath = fullfile(location, [name, '.png']);
+		
+		% Check if png already exists, skip if so
+		if isfile(pngPath), continue, end
+		
 		% Get data (indexes sequentially through datastore)
-		[imgData, metadata] = read(ds);
-		
-		% Extract folder path
-		[sourcePath, fileName] = fileparts(metadata.Filename);
-		
-		% Parse folder structure
-		% radarID = fileName(1:4);
-		% timeData = datetime(fileName(5:end), 'InputFormat', 'yyyyMMdd_HHmmss');
-		
-		% Get the dataset name the data would go into
-		% datasetName = fullfile(timeData.Year, timeData.Month, timeData.Day, radarID, fileName);
+		imgData = read(ds);
 		
 		% Write image to disk (doesn't overwrite existing file)
 		RGBim = imgData{1};
-		filePath = fullfile(sourcePath, [fileName, '.png']);
-		if ~isfile(filePath), imwrite(RGBim, filePath); end
+		imwrite(RGBim, pngPath);
 		
 		% Write label to disk (doesn't overwrite existing file)
 		% label = imgData{2};
 		% filePath = fullfile(sourcePath, [fileName, '.txt']);
 		% if ~isfile(filePath), writelines(string(label), filePath); end
+		
+		% Parse folder structure for HDF5
+		% radarID = fileName(1:4);
+		% timeData = datetime(fileName(5:end), 'InputFormat', 'yyyyMMdd_HHmmss');
+		
+		% Get the dataset name the data would go into
+		% datasetName = fullfile(timeData.Year, timeData.Month, timeData.Day, radarID, fileName);
 	end
 	
 	% Close HDF5 file
@@ -110,7 +123,7 @@ function dsEncoded = encodeLevel2Data(ds, imageSize)
 	
 	arguments
 		ds (1,1) {isa(ds, 'matlab.io.datastore.FileDatastore'), isa(ds, 'matlab.io.datastore.TransformedDatastore')}
-		imageSize (1,2) double = [250, 250];
+		imageSize (1,2) double = [240, 240];
 	end
 	
 	% Encode data using custom function

@@ -4,7 +4,7 @@ function dsAugmented = createImageAugmentation(ds, imageSize)
 	
 	arguments
 		ds (1,1) {isa(ds, 'matlab.io.datastore.ImageDatastore'), isa(ds, 'matlab.io.datastore.TransformedDatastore')}
-		imageSize (1,2) double = [250, 250];
+		imageSize (1,2) double = [240, 240];
 	end
 	
 	% Create image augmenter
