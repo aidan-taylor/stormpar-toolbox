@@ -16,6 +16,9 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 		nameValueArgs.imageSize (1,2) double = [240, 240];
 	end
 	
+	% Start Parallel Pool on Processes (done by gcp to avoid clashes)
+	% p = parpool('Processes');
+	
 	% Load the specified data
 	ds = stormpar.deeplearning.io.loadLevel2Archive(filename, varargin{:});
 	
@@ -33,43 +36,51 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 	% H5fileID = H5F.open(H5Filename, "H5F_ACC_RDWR", "H5P_DEFAULT");
 	% end
 	
-	nFiles = length(ds.UnderlyingDatastores{1}.Files);
+	% Get the number of partitions needed for the pool (starts a default parallel pool on Processes)
+	nPartitions = numpartitions(ds, gcp);
 	
-	% Loop through data and save to disk
-	for iFiles = 1:nFiles
+	parfor iPartition = 1:nPartitions
 		
-		% Check if data can actually be read (safety if loop goes too many times)
-		if ~hasdata(ds)
-			warning('STORMPAR:CORE:InvalidID', ...
-				'Index %i exceeds the number of readable files in the datastore', iFiles); 
-			break
-		end 
+		% Get partition of datastore and number of files in it
+		subds = partition(ds, nPartitions, iPartition);
+		nFiles = length(subds.UnderlyingDatastores{1}.Files);
 		
-		% Form path to possible png file
-		[location, name] = fileparts(ds.UnderlyingDatastores{1}.Files{iFiles});
-		pngPath = fullfile(location, [name, '.png']);
-		
-		% Check if png already exists, skip if so
-		if isfile(pngPath), continue, end
-		
-		% Get data (indexes sequentially through datastore)
-		imgData = read(ds);
-		
-		% Write image to disk (doesn't overwrite existing file)
-		RGBim = imgData{1};
-		imwrite(RGBim, pngPath);
-		
-		% Write label to disk (doesn't overwrite existing file)
-		% label = imgData{2};
-		% filePath = fullfile(sourcePath, [fileName, '.txt']);
-		% if ~isfile(filePath), writelines(string(label), filePath); end
-		
-		% Parse folder structure for HDF5
-		% radarID = fileName(1:4);
-		% timeData = datetime(fileName(5:end), 'InputFormat', 'yyyyMMdd_HHmmss');
-		
-		% Get the dataset name the data would go into
-		% datasetName = fullfile(timeData.Year, timeData.Month, timeData.Day, radarID, fileName);
+		% Loop through data and save to disk
+		for iFiles = 1:nFiles
+			
+			% Check if data can actually be read (safety if loop goes too many times)
+			if ~hasdata(subds)
+				warning('STORMPAR:CORE:InvalidID', ...
+					'Index %i exceeds the number of readable files in the datastore', iFiles);
+				break
+			end
+			
+			% Form path to possible png file
+			[location, name] = fileparts(subds.UnderlyingDatastores{1}.Files{iFiles});
+			pngPath = fullfile(location, [name, '.png']);
+			
+			% Check if png already exists, skip if so
+			if isfile(pngPath), continue, end
+			
+			% Get data (indexes sequentially through datastore)
+			imgData = read(subds);
+			
+			% Write image to disk (doesn't overwrite existing file)
+			RGBim = imgData{1};
+			imwrite(RGBim, pngPath);
+			
+			% Write label to disk (doesn't overwrite existing file)
+			% label = imgData{2};
+			% filePath = fullfile(sourcePath, [fileName, '.txt']);
+			% if ~isfile(filePath), writelines(string(label), filePath); end
+			
+			% Parse folder structure for HDF5
+			% radarID = fileName(1:4);
+			% timeData = datetime(fileName(5:end), 'InputFormat', 'yyyyMMdd_HHmmss');
+			
+			% Get the dataset name the data would go into
+			% datasetName = fullfile(timeData.Year, timeData.Month, timeData.Day, radarID, fileName);
+		end
 	end
 	
 	% Close HDF5 file
