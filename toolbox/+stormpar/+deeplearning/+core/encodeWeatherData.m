@@ -55,12 +55,13 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 				break
 			end
 			
-			% Form path to possible png file
+			% Form path to possible png file (jump up a level to
+			% get out the data folder) 
 			[location, name] = fileparts(subds.UnderlyingDatastores{1}.Files{iFiles});
-			pngPath = fullfile(location, [name, '.png']);
+			pngPath = fullfile(fileparts(location), 'Images', [name, '.png']);
 			
 			% Check if png already exists, skip if so
-			if isfile(pngPath), continue, end
+			% if isfile(pngPath), continue, end
 			
 			% Get data (indexes sequentially through datastore)
 			imgData = read(subds);
@@ -69,10 +70,11 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 			RGBim = imgData{1};
 			imwrite(RGBim, pngPath);
 			
-			% Write label to disk (doesn't overwrite existing file)
-			% label = imgData{2};
-			% filePath = fullfile(sourcePath, [fileName, '.txt']);
-			% if ~isfile(filePath), writelines(string(label), filePath); end
+			% Write label to disk (overwrites existing file) (jump up a level to
+			% get out the data folder) 
+			label = imgData{2};
+			labelPath = fullfile(fileparts(location), 'Labels', [name, '.png']);
+			imwrite(label, labelPath);
 			
 			% Parse folder structure for HDF5
 			% radarID = fileName(1:4);
@@ -152,6 +154,10 @@ function dsEncoded = encodeLevel2Data(ds, imageSize)
 	%% Custom image encoding function
 	function dataOut = formIndexedImage(data)
 		
+		% Intialise min/max radar sensitivity (from Level 2 Specifications)
+		minSens = -32.0;
+		maxSens = 92.5;
+		
 		pc = data{1};
 		
 		% Form mesh to interpolate over
@@ -161,24 +167,69 @@ function dsEncoded = encodeLevel2Data(ds, imageSize)
 		
 		% Shift negative intensity values to positive (dbZ values can be
 		% negative but rgb cannot) This would be an issue if we were trying to
-		% accurately prediciting relfectivyt values as they would show as larger
-		% then actual.
-		intensity = pc.Intensity + abs(min(pc.Intensity)) + 1;
+		% accurately predict reflectivity values as they would show as larger
+		% than actual. (shifts by a constant 32.0 as this is the minimum sensitivity of WSR-88D)
+		% Ensures that the very minimum values are shifted to 1 to allow 0 to be
+		% the missing values background colour
+		intensity = pc.Intensity + abs(minSens) + 1;
 		
-		% Perform surface interpolation and convert to uint8
-		Vg = griddata(double(pc.Location(:,1)), double(pc.Location(:,2)), double(intensity), double(Xg), double(Yg));
-		Vg = uint8(Vg);
+		% Perform surface interpolation and convert to uint8 (wraps NaN values to 0 and rounds floats)
+		indexImage = griddata(double(pc.Location(:,1)), double(pc.Location(:,2)), double(intensity), double(Xg), double(Yg));
+		indexImage = uint8(indexImage);
+		
+		% Form image segmentation label -- TODO Optimise performance
+		label = generateSegmentationLabel(indexImage, abs(minSens));
 		
 		% Get colourmap indices for the number of unique colours (nan values
-		% are ming reflectivyt values and will have been wrapped to 0, so mark
-		% as black)
-		nC = length(unique(Vg)) -1;
+		% are missing reflectivity values and will have been wrapped to 0, so mark
+		% as black) (steps of 1 so get the range between the min and max sensitivities)
+		nC = ceil(range([minSens, maxSens]));
 		map = cat(1, [0, 0, 0], parula(nC));
 		
 		% Convert to RGB and output
-		RGBim = ind2rgb(Vg, map);
-		label = data{2};
+		RGBimage = ind2rgb(indexImage, map);
+		dataOut = {RGBimage, label};
 		
-		dataOut = {RGBim, label};
+		%% Custom Nested Image Segementation Label Generator
+		function label = generateSegmentationLabel(indexImage, offset)
+			%
+			% References
+			% [1] https://www.noaa.gov/jetstream/reflectivity
+			
+			% Intialise label form
+			label = zeros(size(indexImage), 'like', indexImage);
+			
+			for iRow = 1:size(indexImage, 1)
+				for iColumn = 1:size(indexImage, 2)
+					
+					% Get the intensity of the reflectivity for this pixel
+					pixelIntensity = indexImage(iRow, iColumn);
+					
+					% Assign the correct label to each intensity value based on
+					% the NOAA General Reflectivity Guidelines [1]
+					if (pixelIntensity <= (-32 + offset))
+						label(iRow, iColumn) = stormpar.deeplearning.utility.reflectivityScale.NoData;
+						
+					elseif (pixelIntensity > (-32 + offset)) && (pixelIntensity <= (0 + offset))
+						label(iRow, iColumn) = stormpar.deeplearning.utility.reflectivityScale.ExLight;
+						
+					elseif (pixelIntensity > (0 + offset)) && (pixelIntensity <= (20 + offset))
+						label(iRow, iColumn) = stormpar.deeplearning.utility.reflectivityScale.VeryLight;
+						
+					elseif (pixelIntensity > (20 + offset)) && (pixelIntensity <= (40 + offset))
+						label(iRow, iColumn) = stormpar.deeplearning.utility.reflectivityScale.Light;
+						
+					elseif (pixelIntensity > (40 + offset)) && (pixelIntensity <= (50 + offset))
+						label(iRow, iColumn) = stormpar.deeplearning.utility.reflectivityScale.Moderate;
+						
+					elseif (pixelIntensity > (50 + offset)) && (pixelIntensity <= (65 + offset))
+						label(iRow, iColumn) = stormpar.deeplearning.utility.reflectivityScale.Heavy;
+						
+					elseif (pixelIntensity > (65 + offset))
+						label(iRow, iColumn) = stormpar.deeplearning.utility.reflectivityScale.ExHeavy;
+					end
+				end
+			end
+		end
 	end
 end
