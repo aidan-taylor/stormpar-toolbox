@@ -36,6 +36,9 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 	% H5fileID = H5F.open(H5Filename, "H5F_ACC_RDWR", "H5P_DEFAULT");
 	% end
 	
+	% Pull the imageSize into a string to make a dedicated folder for it.
+	sizeString = sprintf("%ix%i", nameValueArgs.imageSize(1,1), nameValueArgs.imageSize(1,2));
+	
 	% Get the number of partitions needed for the pool (starts a default parallel pool on Processes)
 	nPartitions = numpartitions(ds, gcp);
 	
@@ -58,10 +61,10 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 			% Form path to possible png file (jump up a level to
 			% get out the data folder) 
 			[location, name] = fileparts(subds.UnderlyingDatastores{1}.Files{iFiles});
-			pngPath = fullfile(fileparts(location), 'Images', [name, '.png']);
+			pngPath = fullfile(fileparts(location), 'Images', sizeString, [name, '.png']);
 			
-			% Check if png already exists, skip if so
-			% if isfile(pngPath), continue, end
+			% Check if png already exists, skip if so (assumes label also exists)
+			if isfile(pngPath), continue, end
 			
 			% Get data (indexes sequentially through datastore)
 			imgData = read(subds);
@@ -73,7 +76,7 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 			% Write label to disk (overwrites existing file) (jump up a level to
 			% get out the data folder) 
 			label = imgData{2};
-			labelPath = fullfile(fileparts(location), 'Labels', [name, '.png']);
+			labelPath = fullfile(fileparts(location), 'Labels', sizeString, [name, '.png']);
 			imwrite(label, labelPath);
 			
 			% Parse folder structure for HDF5
