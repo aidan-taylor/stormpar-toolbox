@@ -1,15 +1,15 @@
-function encodeWeatherData(filename, varargin, nameValueArgs)
+function encodeWeatherData(databaseLocation, nameValueArgs)
 	% ENCODEWEATHERDATA Convert binary radar data to PNG (lowest elevation sweep)
 	% TODO -- Change so saves in a single HDF5 file rather than lots of PNGs>
 	
 	arguments
 		% H5Filename (1,1) string = fullfile(tempdir, 'NEXRAD-Imagestore');
-		filename (1,:) string = [];
+		databaseLocation (1,:) string = [];
 	end
 	
-	arguments (Repeating)
-		varargin
-	end
+	% arguments (Repeating)
+	% 	varargin
+	% end
 	
 	arguments
 		nameValueArgs.amountOfJitter (1,1) double = 0.01;
@@ -19,8 +19,9 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 	% Start Parallel Pool on Processes (done by gcp to avoid clashes)
 	% p = parpool('Processes');
 	
-	% Load the specified data
-	ds = stormpar.deeplearning.io.loadLevel2Archive(filename, varargin{:});
+	% Load the specified data (assumes within 'Data' subfolder)
+	dataSubfolder = fullfile(databaseLocation, 'Data');
+	ds = stormpar.deeplearning.io.loadLevel2Archive(dataSubfolder);
 	
 	% Apply random jitter to each point
 	ds = augmentLevel2Data(ds, nameValueArgs.amountOfJitter);
@@ -38,6 +39,13 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 	
 	% Pull the imageSize into a string to make a dedicated folder for it.
 	sizeString = sprintf("%ix%i", nameValueArgs.imageSize(1,1), nameValueArgs.imageSize(1,2));
+	
+	% Form and create image and label folders
+	imageFolder  =  fullfile(databaseLocation, 'Images', sizeString);
+	if ~isfolder(imageFolder), mkdir(imageFolder); end
+	
+	labelFolder = fullfile(databaseLocation, 'Labels', sizeString);
+	if ~isfolder(labelFolder), mkdir(labelFolder); end
 	
 	% Get the number of partitions needed for the pool (starts a default parallel pool on Processes)
 	nPartitions = numpartitions(ds, gcp);
@@ -60,8 +68,8 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 			
 			% Form path to possible png file (jump up a level to
 			% get out the data folder) 
-			[location, name] = fileparts(subds.UnderlyingDatastores{1}.Files{iFiles});
-			pngPath = fullfile(fileparts(location), 'Images', sizeString, [name, '.png']);
+			[~, name] = fileparts(subds.UnderlyingDatastores{1}.Files{iFiles});
+			pngPath = fullfile(imageFolder, [name, '.png']);
 			
 			% Check if png already exists, skip if so (assumes label also exists)
 			if isfile(pngPath), continue, end
@@ -76,7 +84,8 @@ function encodeWeatherData(filename, varargin, nameValueArgs)
 			% Write label to disk (overwrites existing file) (jump up a level to
 			% get out the data folder) 
 			label = imgData{2};
-			labelPath = fullfile(fileparts(location), 'Labels', sizeString, [name, '.png']);
+			
+			labelPath = fullfile(labelFolder, [name, '.png']);
 			imwrite(label, labelPath);
 			
 			% Parse folder structure for HDF5
