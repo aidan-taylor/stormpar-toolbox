@@ -1,175 +1,128 @@
-function [file, path] = uiget(basepath, varargin)
-% UIGET generic folder and/or file selection dialog box
-%
-% Syntax:
-%     file = uiget()
-%     [file, path] = uiget()
-%     ___ = uiget(basepath)
-%     ___ = uiget(basepath, Name, Value)
-%
-% Available Name, Value Pairs:
-%     MultiSelect      - Specify whether a user can select multiple files or folders
-%     ScalarPathOutput - Specify whether a scalar path is output when using MultiSelect
-%     Title            - Specify a custom dialog title
-%     ExtensionFilter  - Specify a custom file extension filter
-%     ForceCharOutput  - Force return of a cell array of char
-%
-% See README.md for detailed documentation and examples
-%
-% sco1 (2025). uiget (https://github.com/StackOverflowMATLABchat/uiget), GitHub. Retrieved March 13, 2025
-%
-% See also UIGETDIR, UIGETFILE
-if nargin == 0
-	% Use current working directory if no inputs are passed
-	basepath = pwd;
-elseif nargin == 1
-	% Check for existence of basepath as a directory, default to current
-	% directory if it doesn't exist
-	if ~exist(basepath, 'dir')
-		basepath = pwd;
-	end
-end
-% Parse additional inputs
-p = buildParser();
-p.parse(varargin{:});
-% Initialize JFileChooser window
-% https://docs.oracle.com/javase/8/docs/api/javax/swing/JFileChooser.html
-jFC = javax.swing.JFileChooser(basepath);
-jFC.setFileSelectionMode(jFC.FILES_AND_DIRECTORIES)
-jFC.setDialogTitle(p.Results.Title)
-% Build file filter
-if ~isempty(p.Results.ExtensionFilter)
-	extensions = parsefilter(p.Results.ExtensionFilter(:, 1));
+function pathname = uiget(varargin)
+	% UIGET Generic folder and/or file selection dialog box
+	% Uses Java Swing package (built-in)
+	%
+	% ==================================
+	% INPUTS (Name-Value)
+	% ==================================
+	%
+	% ExtensionFilter  (:,2) cell 
+	%		Specify a custom file extension filter where each
+	%		row is {extension(s), description} as follows uigetfile syntax.
+	%
+	% MultiSelect (1,1) logical 
+	%		Specify whether a user can select multiple files and/or folders
+	%
+	% Title (1,1) string 
+	%		Specify a custom dialog title
+	%
+	% =======
+	% OUTPUTS
+	% =======
+	%
+	% pathname (1,:) string 
+	%		String containing the absolute paths to the chosen file(s) and/or folder(s).
+	%
+	% ==========
+	% References
+	% ==========
+	% .. [1] https://docs.oracle.com/javase/8/docs/api/javax/swing/UIManager.html
+	% .. [2] https://docs.oracle.com/javase/8/docs/api/javax/swing/JFileChooser.html
+	%
+	% See also UIGETDIR, UIGETFILE
 	
-	nfilters = size(p.Results.ExtensionFilter, 1);
-	for ii = 1:nfilters
-		if isempty(extensions{ii})
-			% Catch invalid extension specs
-			continue
+	% arguments
+	% 	nameValueArgs.MultiSelect (1,1) logical = false;
+	% 	nameValueArgs.Title (1,1) string = "Select File or Folder";
+	% end
+	
+	% Check if supported in execution context
+	validateModalDialogsCapability(AllowInNoFigureWindows=true);
+	
+	% Parse inputs
+	p = inputParser;
+	p.addParameter('ExtensionFilter', [], @(x)iscell(x));
+	p.addParameter('MultiSelect', false, @(x)islogical(x))
+	p.addParameter('Title', 'Select File or Folder', @(x)mustBeTextScalar(x))
+	p.parse(varargin{:});
+	
+	% First disable the ability of the ui to rename file(s) and folder(s) [1]
+	javax.swing.UIManager.put('FileChooser.readOnly', true);
+	
+	% Initialize JFileChooser interface [2]
+	jFC = javax.swing.JFileChooser(pwd);
+	jFC.setFileSelectionMode(jFC.FILES_AND_DIRECTORIES)
+	jFC.setDialogTitle(p.Results.Title)
+	
+	% Sort file filter. TODO -- Clean up extension handling
+	if ~isempty(p.Results.ExtensionFilter)
+		extensions = parsefilter(p.Results.ExtensionFilter(:, 1));
+		
+		nfilters = size(p.Results.ExtensionFilter, 1);
+		for ii = 1:nfilters
+			if isempty(extensions{ii})
+				% Catch invalid extension specs
+				continue
+			end
+			jExtensionFilter = javax.swing.filechooser.FileNameExtensionFilter(p.Results.ExtensionFilter{ii, 2}, extensions{ii});
+			jFC.addChoosableFileFilter(jExtensionFilter)
 		end
-		jExtensionFilter = javax.swing.filechooser.FileNameExtensionFilter(p.Results.ExtensionFilter{ii, 2}, extensions{ii});
-		jFC.addChoosableFileFilter(jExtensionFilter)
+		
+		tmp = jFC.getChoosableFileFilters();
+		jFC.setFileFilter(tmp(2))
 	end
 	
-	tmp = jFC.getChoosableFileFilters();
-	jFC.setFileFilter(tmp(2))
-end
-if p.Results.MultiSelect
-	jFC.setMultiSelectionEnabled(true)
-	
-	% Change title if default is being used
-	if any(strcmp(p.UsingDefaults, 'Title'))
-		jFC.setDialogTitle('Select File(s) and/or Folder(s)')
-	end
-else
-	jFC.setMultiSelectionEnabled(false)
-end
-% Switch over possible responses from JFileChooser
-returnVal = jFC.showOpenDialog([]);
-switch returnVal
-	case jFC.APPROVE_OPTION
-		% Selection string will be empty if getSelectedFiles is used when
-		% MultiSelect is disabled
-		if jFC.isMultiSelectionEnabled
-			selectionStr = string(jFC.getSelectedFiles());
-		else
-			selectionStr = string(jFC.getSelectedFile());
-		end
-	case jFC.CANCEL_OPTION
-		% Short-circuit: Return empty array on cancel
-		file = "";
-		path = "";
-		return
-	otherwise
-		err = MException("uiget:JFileWindow:unsupportedResult", ...
-			"Unsupported result returned from JFileChooser: %s.\n" + ...
-			"Please consult the documentation for the current MATLAB Java version (%s)", ...
-			returnVal, string(java.lang.System.getProperty("java.version")));
-		err.throw()
-end
-npicked = numel(selectionStr);
-file = strings(npicked, 1);
-path = strings(npicked, 1);
-for ii = 1:npicked
-	[path(ii), filename, ext] = fileparts(selectionStr(ii));
-	file(ii) = filename + ext;
-	
-	% Because we can select directories, we want to have them output as a
-	% path and not a file
-	if verLessThan('matlab','9.4')
-		% string inputs to fullfile were silently added in R2018a, use char
-		% for R2017a and R2017b
-		tmppath = char(path(ii));
-		tmpfile = char(file(ii));
-		if exist(fullfile(tmppath, tmpfile), 'dir')
-			path(ii) = string(fullfile(tmppath, tmpfile));
-			file(ii) = "";
+	% Handle multiple file/folder selection
+	if p.Results.MultiSelect
+		jFC.setMultiSelectionEnabled(true)
+		
+		% Change title if default is being used. TODO -- Does this needs
+		% changing to use arguments block?
+		if any(strcmp(p.UsingDefaults, 'Title'))
+			jFC.setDialogTitle('Select File(s) and/or Folder(s)')
 		end
 	else
-		if exist(fullfile(path(ii), file(ii)), 'dir')
-			path(ii) = fullfile(path(ii), file(ii));
-			file(ii) = "";
-		end
+		jFC.setMultiSelectionEnabled(false)
 	end
-end
-% Since we've now adjusted file in cases where a folder was selected, warn
-% the user if file is going to be empty and they're not requesting path to
-% go with it
-emptyfiletest = (file == '');
-if nargout <= 1 && any(emptyfiletest)
-	warning("uiget:uiget:nopathoutputrequested", ...
-		"One or more paths have been selected without requesting the path output.\n" + ...
-		"Please specify a second output to uiget to receive these paths." ...
-		);
-end
-% Simplify path output if needed
-if p.Results.ScalarPathOutput
-	% Check for number of unique paths
-	% If more than one is present, use the first & throw a warning
-	uniquepaths = unique(path);
-	nuniquepaths = numel(uniquepaths);
-	if nuniquepaths == 1
-		path = uniquepaths;
-	elseif nuniquepaths > 1
-		path = uniquepaths(1);
+	
+	% Interact with dialog (implicitly suspends matlab window)
+	success = jFC.showOpenDialog([]);
+	
+	% Handle dialog return options
+	switch success
 		
-		warning("uiget:ScalarPathOutput:multipleuniquepaths", ...
-			"Multiple unique paths selected, ignoring %u extra selections.", ...
-			nuniquepaths - 1);
+		case jFC.APPROVE_OPTION
+			% getSelectedFiles is empty when MultiSelect is disabled and
+			% getSelectedFile is scalar on enable.
+			if jFC.isMultiSelectionEnabled
+				pathname = string(jFC.getSelectedFiles())';
+			else
+				pathname = string(jFC.getSelectedFile());
+			end
+			
+		case jFC.CANCEL_OPTION
+			% Short-circuit: Return numeric array on cancel (easier to parse
+			% than an initialised but empty string)
+			pathname = 0;
+			return
+			
+		otherwise
+			% Handled error in JFileChooser
+			error('UIGET:DIALOG:JavaException', 'Unsupported result returned from JFileChooser: %i.', success);
 	end
-end
-% Convert to cell array of char if flag is set
-if p.Results.ForceCharOutput
-	file = cellstr(file);
-	path = cellstr(path);
-end
-end
-function p = buildParser()
-% Validate input Name,Value pairs
-% Initialize verbosely, since inputParser apparently doesn't have a
-% constructor that takes inputs...
-p = inputParser();
-p.FunctionName = 'uiget';
-p.CaseSensitive = false;
-p.KeepUnmatched = true;
-p.PartialMatching = false;
-% Add Name,Value pairs
-p.addParameter('MultiSelect', false, @(x)islogical(x))
-p.addParameter('ScalarPathOutput', false, @(x)islogical(x))
-p.addParameter('Title', 'Select File or Folder', @(x)validateattributes(x, {'char', 'string'}, {'scalartext'}))
-p.addParameter('ExtensionFilter', [], @(x)validateattributes(x, {'cell'}, {'ncols', 2}))
-p.addParameter('ForceCharOutput', false, @(x)islogical(x))
-end
+	
+	% TODO -- Do I need more handling?
+	
+	%%
 function extensions = parsefilter(incell)
-% Parse the extension filter extensions into a format usable by
-% javax.swing.filechooser.FileNameExtensionFilter
-%
-% Since we're keeping with the uigetdir-esque extension syntax
-% (e.g. *.extension), we need strip off '*.' from each for compatibility
-% with the Java component.
-extensions = cell(size(incell));
-for ii = 1:numel(incell)
-	exp = '\*\.(\w+)';
-	extensions{ii} = string(regexp(incell{ii}, exp, 'tokens'));
-end
-end
+	% Parse the extension filter extensions into a format usable by
+	% javax.swing.filechooser.FileNameExtensionFilter
+	%
+	% Since we're keeping with the uigetdir-esque extension syntax
+	% (e.g. *.extension), we need strip off '*.' from each for compatibility
+	% with the Java component.
+	extensions = cell(size(incell));
+	for ii = 1:numel(incell)
+		exp = '\*\.(\w+)';
+		extensions{ii} = string(regexp(incell{ii}, exp, 'tokens'));
+	end
