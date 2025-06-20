@@ -7,31 +7,34 @@ function encodeWeatherData(ds, saveLocation, nameValueArgs)
 	% INPUTS (Required)
 	% =================
 	% ds (1,1) matlab.io.datastore.FileDatastore
-	%		
+	%		Datastore containing NEXRAD Level II binary files.
 	%
 	% =================
 	% INPUTS (Optional)
 	% =================
 	% saveLocation (1,1) string
-	%		
+	%		Local folder to save encoded NEXRAD Level II data to.
 	%
 	% ===================
 	% INPUTS (Name-Value)
 	% ===================
 	% fieldname (1,1) string
-	%		
+	%		Name of the field from which the point cloud data should be
+	%		retrieved.
 	%
-	% sweep (1,N) double
-	%		
+	% sweep (1,M) double
+	%		Sweep number(s) to retrieve data for.
 	%
 	% resolution (1,1) double
-	%		
+	%		Step size of the box grid filter to apply during point cloud
+	%		downsampling.
 	%
 	% amountOfJitter (1,1) double
-	%		
+	%		The amount of per-point jitter to apply to the raw point cloud data.
 	%
 	% imageSize (1,2) double
-	%		
+	%		Dimensions of the encoded images and labels (forms a sub-folder
+	%		below databaseLocation).
 	%
 	% ==========
 	% References

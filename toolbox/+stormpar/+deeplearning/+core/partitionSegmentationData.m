@@ -3,7 +3,54 @@ function [dsTrain, dsVal, dsTest] = partitionSegmentationData(dsImage, dsLabel, 
 	% and testing sets and apply randomised augmentation to training data to
 	% prevent over-fitting. 
 	%
+	% =================
+	% INPUTS (Required)
+	% =================
+	% dsImage (1,1) matlab.io.datastore.ImageDatastore
+	%		Datastore containing each of the RGB encoded NEXRAD Level II image
+	%		files. Must contain the same number of files as dsLabel.
 	%
+	% dsLabel (1,1) matlab.io.datastore.PixelLabelDatastore
+	%		Datastore containing each of the pixel labelled NEXRAD Level II image
+	%		files. Must contain the same number of files as dsImage.
+	%
+	% ===================
+	% INPUTS (Name-Value)
+	% ===================
+	% rngSeed (1,1) double
+	%		Random number seed for generator. Used when shuffling the order of
+	%		images in each datastore
+	%
+	% rngGenerator (1,1) string
+	%		Random number algorithm for generator. Used when shuffling the order of
+	%		images in each datastore
+	%
+	% partitionRatios (1,2) double
+	%		The ratio of training images to validation images (this should not
+	%		sum to unity as the remaining files will be used for testing).
+	%
+	% xTranslation (1,2) double
+	%		Lower and Upper bounds for a randomised translation augmentation
+	%		in the x-axis.
+	%
+	% yTranslation (1,2) double
+	%		Lower and Upper bounds for a randomised translation augmentation
+	%		in the y-axis.
+	%
+	% =======
+	% OUTPUTS
+	% =======
+	% dsTrain (1,1) matlab.io.datastore.TransformedDatastore
+	%		Datastore containing the augmented combination of encoded NEXRAD
+	%		Level II images for training.
+	%
+	% dsVal (1,1) matlab.io.datastore.CombinedDatastore
+	%		Datastore containing the combination of encoded NEXRAD Level II
+	%		images for validation.
+	%
+	% dsTest (1,1) matlab.io.datastore.CombinedDatastore
+	%		Datastore containing the combination of encoded NEXRAD Level II
+	%		images for testing.
 	
 	arguments
 		dsImage (1,1) matlab.io.datastore.ImageDatastore
@@ -16,6 +63,11 @@ function [dsTrain, dsVal, dsTest] = partitionSegmentationData(dsImage, dsLabel, 
 		nameValueArgs.partitionRatios (1,2) double = [0.60, 0.20];
 		nameValueArgs.xTranslation (1,2) double = [-10, 10];
 		nameValueArgs.yTranslation (1,2) double = [-10, 10];
+	end
+	
+	% Ensure both datastores contain the same number of files
+	if numpartitions(dsImage) ~= numpartitions(dsLabel)
+		error("STORMPAR:CORE:InvalidInput", "Both datastores must contain the same number of files");
 	end
 	
 	% Set initial random state for example reproducibility.
