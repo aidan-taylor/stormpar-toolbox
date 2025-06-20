@@ -16,6 +16,10 @@ function pathname = uiget(varargin)
 	% Title (1,1) string 
 	%		Specify a custom dialog title
 	%
+	% SelectionMode (1,1) string {"default", "folders", "files"}
+	%		Specify whether only files / folders / both can be selected by the
+	%		dialog
+	%
 	% =======
 	% OUTPUTS
 	% =======
@@ -44,6 +48,7 @@ function pathname = uiget(varargin)
 	p.addParameter('ExtensionFilter', [], @(x)iscell(x));
 	p.addParameter('MultiSelect', false, @(x)islogical(x))
 	p.addParameter('Title', 'Select File or Folder', @(x)mustBeTextScalar(x))
+	p.addParameter('SelectionMode', 'default', @(x)mustBeTextScalar(x))
 	p.parse(varargin{:});
 	
 	% First disable the ability of the ui to rename file(s) and folder(s) [1]
@@ -51,8 +56,17 @@ function pathname = uiget(varargin)
 	
 	% Initialize JFileChooser interface [2]
 	jFC = javax.swing.JFileChooser(pwd);
-	jFC.setFileSelectionMode(jFC.FILES_AND_DIRECTORIES)
-	jFC.setDialogTitle(p.Results.Title)
+	jFC.setDialogTitle(p.Results.Title);
+	
+	% Specify selection mode
+	if strncmpi(p.Results.SelectionMode, "files", 4)
+		jFC.setFileSelectionMode(jFC.FILES_ONLY);
+	elseif strncmpi(p.Results.SelectionMode, "folders", 6)
+		jFC.setFileSelectionMode(jFC.DIRECTORIES_ONLY);
+	else
+		jFC.setFileSelectionMode(jFC.FILES_AND_DIRECTORIES);
+	end
+	
 	
 	% Sort file filter. TODO -- Clean up extension handling
 	if ~isempty(p.Results.ExtensionFilter)
